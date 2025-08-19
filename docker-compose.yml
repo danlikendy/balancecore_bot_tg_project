@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    ports: ["5432:5432"]
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+  api:
+    build: .
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    depends_on: [db, redis]
+    ports: ["8000:8000"]
+
+  bot:
+    build: .
+    command: python -m bot.main
+    env_file: .env
+    depends_on: [api, db, redis]
+
+  worker:
+    build: .
+    command: celery -A core.celery_app.celery worker -l INFO
+    env_file: .env
+    depends_on: [db, redis]
