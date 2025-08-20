@@ -1,15 +1,72 @@
-<!doctype html><html><head>
+<!doctype html>
+<html>
+<head>
   <meta charset="utf-8"><title>Admin · Withdraws</title>
   <link rel="icon" href="/favicon.ico">
-</head><body>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px }
+    .row { display:flex; gap:12px; align-items:center; margin:6px 0 }
+    .pill { margin-right:8px }
+    .muted { color:#666 }
+    nav a { margin-right:12px }
+  </style>
+</head>
+<body>
   <h1>Withdraws: {{ status }}</h1>
-  {% if withdraws %}
-    <ul>
-    {% for w in withdraws %}
-      <li>#{{ w.id }} · {{ w.amount }} · {{ w.status }}</li>
-    {% endfor %}
-    </ul>
+
+  <nav>
+    <a href="/admin/ui/withdraws?status=pending">pending</a>
+    <a href="/admin/ui/withdraws?status=approved">approved</a>
+    <a href="/admin/ui/withdraws?status=rejected">rejected</a>
+    <a href="/admin/ui/login" style="margin-left:16px">login</a>
+  </nav>
+
+  {% if withdraws and withdraws|length > 0 %}
+    <div id="list">
+      {% for w in withdraws %}
+      <div class="row" data-id="{{ w.id }}">
+        <span class="pill">#{{ w.id }}</span>
+        <span class="pill">{{ w.amount }}</span>
+        <span class="pill muted">{{ w.status }}</span>
+        {% if status == 'pending' %}
+          <button class="approve">Approve</button>
+          <button class="reject">Reject</button>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
   {% else %}
     <p>Нет заявок.</p>
   {% endif %}
-</body></html>
+
+  <script>
+    const token = localStorage.getItem('adminToken') || '';
+    function call(id, action){
+      if(!token){ return alert('Зайдите на /admin/ui/login и сохраните токен'); }
+      fetch(`/admin/withdraws/${id}/${action}`, {
+        method: 'POST',
+        headers: { 'X-Admin-Token': token }
+      })
+      .then(r => r.json())
+      .then(j => {
+        if(j.detail){ alert(j.detail); return; }
+        location.reload();
+      })
+      .catch(e => alert(e));
+    }
+
+    document.querySelectorAll('.approve').forEach(b=>{
+      b.onclick = () => call(b.parentElement.dataset.id, 'approve');
+    });
+    document.querySelectorAll('.reject').forEach(b=>{
+      b.onclick = () => call(b.parentElement.dataset.id, 'reject');
+    });
+
+    // лёгкий авто‑обновлятор (раз в 15 сек на pending)
+    const params = new URLSearchParams(location.search);
+    if ((params.get('status') || 'pending') === 'pending') {
+      setInterval(()=>location.reload(), 15000);
+    }
+  </script>
+</body>
+</html>

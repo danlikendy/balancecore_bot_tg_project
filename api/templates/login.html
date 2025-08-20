@@ -1,15 +1,19 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="card">
-  <h3>Вход в админку</h3>
-  <div class="row" style="margin-top:12px">
-    <input id="token" type="text" placeholder="X-Admin-Token" style="width:360px" />
-    <button class="btn" onclick="setToken(document.getElementById('token').value); location.href='/admin/withdraws';">
-      Сохранить и перейти
-    </button>
-  </div>
-  <p style="margin-top:12px;color:#6b7280">
-    Токен из .env: <code>ADMIN_TOKEN</code>.
-  </p>
-</div>
-{% endblock %}
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Admin · Login</title></head>
+<body>
+  <h1>Admin login</h1>
+  <input id="token" type="text" placeholder="X-Admin-Token" style="width:360px">
+  <button id="save">Save</button>
+  <script>
+    document.getElementById('save').onclick = () => {
+      const t = document.getElementById('token').value.trim();
+      if (!t) return alert('Введите токен');
+      localStorage.setItem('adminToken', t);
+      location.href = '/admin/ui/withdraws';
+    };
+    // авто‑подстановка если уже есть
+    document.getElementById('token').value = localStorage.getItem('adminToken') || '';
+  </script>
+</body>
+</html>
