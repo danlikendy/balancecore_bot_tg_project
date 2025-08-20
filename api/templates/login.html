@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h3>Вход в админку</h3>
+  <div class="row" style="margin-top:12px">
+    <input id="token" type="text" placeholder="X-Admin-Token" style="width:360px" />
+    <button class="btn" onclick="setToken(document.getElementById('token').value); location.href='/admin/withdraws';">
+      Сохранить и перейти
+    </button>
+  </div>
+  <p style="margin-top:12px;color:#6b7280">
+    Токен из .env: <code>ADMIN_TOKEN</code>.
+  </p>
+</div>
+{% endblock %}

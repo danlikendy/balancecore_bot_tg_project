@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="row">
+    <h3 style="margin:0">Withdraws ({{ status }})</h3>
+    <div class="spacer"></div>
+    <form method="get" action="/admin/withdraws" class="row">
+      <select name="status">
+        <option value="pending"  {{ 'selected' if status=='pending'  else '' }}>pending</option>
+        <option value="approved" {{ 'selected' if status=='approved' else '' }}>approved</option>
+        <option value="rejected" {{ 'selected' if status=='rejected' else '' }}>rejected</option>
+      </select>
+      <button class="btn secondary" type="submit">Фильтр</button>
+    </form>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>ID</th><th>User</th><th>Amount</th><th>Dest</th><th>Status</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+    {% for w in items %}
+      <tr id="wr-{{ w.id }}">
+        <td>{{ w.id }}</td>
+        <td>{{ w.user_id }}</td>
+        <td>{{ "%.2f"|format(w.amount) }}</td>
+        <td>{{ w.dest }}</td>
+        <td>{{ w.status }}</td>
+        <td class="row">
+          {% if w.status == 'pending' %}
+            <button class="btn"
+              data-url="/admin/withdraws/{{ w.id }}/approve"
+              data-id="{{ w.id }}"
+              onclick="handle(this)">Approve</button>
+            <button class="btn danger"
+              data-url="/admin/withdraws/{{ w.id }}/reject"
+              data-id="{{ w.id }}"
+              onclick="handle(this)">Reject</button>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
