@@ -7,7 +7,7 @@ Telegram бот для управления балансом с возможно
 ### 1. Автоматическая настройка
 ```bash
 # Клонируйте и настройте проект
-git clone <repository-url>
+git clone https://github.com/danlikendy/balancecore_bot_tg_project
 cd balancecore_bot_tg_project
 
 # Автоматическая настройка
@@ -47,7 +47,7 @@ make dev
 make docker-up postgres redis  # Только БД
 make migrate                   # Миграции
 uvicorn api.main:app --reload  # API
-python bot/main.py            # Бот
+python bot/main.py             # Бот
 ```
 
 ## Функциональность
@@ -115,25 +115,25 @@ WITHDRAWAL_DELAY_DAYS=7        # Задержка вывода в днях
 ```
 balancecore_bot_tg_project/
 ├── bot/                    # Telegram бот
-│   ├── handlers/          # Обработчики команд
-│   ├── keyboards/         # Клавиатуры
-│   ├── middlewares/       # Middleware
-│   └── main.py           # Точка входа бота
-├── api/                   # FastAPI приложение
-│   ├── main.py           # Основное API
-│   ├── admin_ui.py       # Админ-панель
-│   ├── templates/        # HTML шаблоны
-│   └── static/           # CSS/JS файлы
-├── core/                  # Основная логика
-│   ├── models/           # Модели базы данных
-│   ├── schemas/          # Pydantic схемы
-│   ├── repositories/     # Репозитории
-│   ├── config.py         # Конфигурация
-│   └── db.py            # Подключение к БД
-├── migrations/            # Alembic миграции
-├── scripts/              # Скрипты развертывания
-├── tests/                # Тесты
-└── docker-compose.yml    # Docker конфигурация
+│   ├── handlers/           # Обработчики команд
+│   ├── keyboards/          # Клавиатуры
+│   ├── middlewares/        # Middleware
+│   └── main.py             # Точка входа бота
+├── api/                    # FastAPI приложение
+│   ├── main.py             # Основное API
+│   ├── admin_ui.py         # Админ-панель
+│   ├── templates/          # HTML шаблоны
+│   └── static/             # CSS/JS файлы
+├── core/                   # Основная логика
+│   ├── models/             # Модели базы данных
+│   ├── schemas/            # Pydantic схемы
+│   ├── repositories/       # Репозитории
+│   ├── config.py           # Конфигурация
+│   └── db.py               # Подключение к БД
+├── migrations/             # Alembic миграции
+├── scripts/                # Скрипты развертывания
+├── tests/                  # Тесты
+└── docker-compose.yml      # Docker конфигурация
 ```
 
 ## Разработка
@@ -179,5 +179,3 @@ make migrate-create
 ## Лицензия
 
 MIT License
-
-
