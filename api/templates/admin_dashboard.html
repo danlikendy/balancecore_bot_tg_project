@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - BalanceCore Admin{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1>Админ-панель BalanceCore</h1>
+        <p class="text-muted">Управление балансом и заявками пользователей</p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h5 class="card-title">Ожидающие заявки</h5>
+                <h2 class="card-text">{{ pending_count }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5 class="card-title">Процент админа</h5>
+                <h2 class="card-text">{{ admin_percentage }}%</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <h5 class="card-title">Мин. сумма вывода</h5>
+                <h2 class="card-text">{{ min_withdrawal }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title">Задержка вывода</h5>
+                <h2 class="card-text">{{ withdrawal_delay }} дн.</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Быстрые действия</h5>
+            </div>
+            <div class="card-body">
+                <a href="/admin/withdraws?status=pending" class="btn btn-primary">
+                    Просмотреть ожидающие заявки
+                </a>
+                <a href="/admin/users" class="btn btn-secondary">
+                    Управление пользователями
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

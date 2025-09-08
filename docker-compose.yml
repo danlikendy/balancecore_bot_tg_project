@@ -1,30 +1,82 @@
-services:
-  db:
-    image: postgres:14
-    environment:
-      POSTGRES_DB: app
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
-    ports: ["5432:5432"]
-  redis:
-    image: redis:7
-    ports: ["6379:6379"]
+version: '3.8'
 
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: balancecore_bot
+      POSTGRES_USER: balancecore
+      POSTGRES_PASSWORD: balancecore_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U balancecore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis для FSM
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API сервер
   api:
     build: .
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
-    env_file: .env
-    depends_on: [db, redis]
-    ports: ["8000:8000"]
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - DATABASE_URL=postgresql://balancecore:balancecore_password@postgres:5432/balancecore_bot
+      - REDIS_URL=redis://redis:6379/0
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_USER_ID=${ADMIN_USER_ID}
+      - SECRET_KEY=${SECRET_KEY}
+      - MIN_WITHDRAWAL_AMOUNT=${MIN_WITHDRAWAL_AMOUNT:-100}
+      - ADMIN_PERCENTAGE=${ADMIN_PERCENTAGE:-5}
+      - WITHDRAWAL_DELAY_DAYS=${WITHDRAWAL_DELAY_DAYS:-7}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    restart: unless-stopped
 
+  # Telegram бот
   bot:
     build: .
-    command: python -m bot.main
-    env_file: .env
-    depends_on: [api, db, redis]
+    command: python bot/main.py
+    environment:
+      - DATABASE_URL=postgresql://balancecore:balancecore_password@postgres:5432/balancecore_bot
+      - REDIS_URL=redis://redis:6379/0
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_USER_ID=${ADMIN_USER_ID}
+      - SECRET_KEY=${SECRET_KEY}
+      - MIN_WITHDRAWAL_AMOUNT=${MIN_WITHDRAWAL_AMOUNT:-100}
+      - ADMIN_PERCENTAGE=${ADMIN_PERCENTAGE:-5}
+      - WITHDRAWAL_DELAY_DAYS=${WITHDRAWAL_DELAY_DAYS:-7}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    restart: unless-stopped
 
-  worker:
-    build: .
-    command: celery -A core.celery_app.celery worker -l INFO
-    env_file: .env
-    depends_on: [db, redis]
+volumes:
+  postgres_data:
+  redis_data:

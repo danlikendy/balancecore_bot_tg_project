@@ -1,231 +1,255 @@
-# api/main.py
-import os
-import logging
-from fastapi import FastAPI, Depends, HTTPException, Header, Query, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import (
-    JSONResponse, FileResponse, PlainTextResponse, HTMLResponse, Response, RedirectResponse
-)
-from starlette.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
-
-from core.db import SessionLocal
-from core.config import settings
-from core.schemas.public import BalanceOut, Tariff as TariffSchema
-from core.repositories.balance import get_balance, get_or_create_user
-from core.models.withdraw_request import WithdrawRequest
-from core.models.tariff import Tariff
-from api.admin_ui import router as admin_ui_router  # оставим, если нет дублирующих путей
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+from sqlalchemy.orm import Session
+from typing import List
+import uvicorn
 
-# --- Templates/Static ---
-TEMPLATES_DIR = "api/templates"
-STATIC_DIR = "api/static"
-templates = Jinja2Templates(directory=TEMPLATES_DIR)
+from core.db import get_db
+from core.repositories.balance import BalanceRepository
+from core.schemas.public import (
+    UserResponse, TransactionResponse, WithdrawRequestResponse,
+    WithdrawRequestCreate, WithdrawRequestUpdate, BalanceUpdate
+)
+from core.models.transaction import TransactionType, TransactionStatus
+from core.models.withdraw_request import WithdrawRequest, WithdrawStatus
+from core.config import settings
+from api.admin_ui import router as admin_router
 
 app = FastAPI(
-    title="BalanceCore API",
-    description="Core API для BalanceCore",
-    version="1.0.2",
+    title="BalanceCore Bot API",
+    description="API для управления балансом пользователей",
+    version="1.0.0"
 )
 
-# монтируем статику только если папка существует
-if os.path.isdir(STATIC_DIR):
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# Подключаем роутер админ-панели
+app.include_router(admin_router)
 
-# дополнительный роутер (убедись, что пути не конфликтуют)
-app.include_router(admin_ui_router)
+# Подключаем статические файлы и шаблоны
+app.mount("/static", StaticFiles(directory="api/static"), name="static")
+templates = Jinja2Templates(directory="api/templates")
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("balancecore-api")
 
-# --- CORS ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+@app.get("/")
+async def root():
+    return {"message": "BalanceCore Bot API", "version": "1.0.0"}
 
-# ---- DB session ----
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
-# ---- System / Ops ----
-@app.get("/health", tags=["system"])
-def health():
-    return {"status": "ok"}
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
-@app.get("/", tags=["system"])
-def index():
-    return {"service": "balancecore-api", "ok": True}
 
-# robots.txt (GET + HEAD)
-def _robots_text() -> str:
-    path = os.path.join(STATIC_DIR, "robots.txt")
-    if os.path.isfile(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read()
-    return "User-agent: *\nDisallow:\n"
+# Пользователи
+@app.get("/users/{telegram_id}", response_model=UserResponse)
+async def get_user(telegram_id: int, db: Session = Depends(get_db)):
+    """Получить информацию о пользователе"""
+    repo = BalanceRepository(db)
+    user = repo.get_user_by_telegram_id(telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
 
-@app.get("/robots.txt", response_class=PlainTextResponse, tags=["system"])
-def robots_get():
-    return _robots_text()
 
-@app.head("/robots.txt", tags=["system"])
-def robots_head():
-    # HEAD должен вернуть только заголовки и длину, без тела
-    content = _robots_text().encode("utf-8")
-    return Response(status_code=200, media_type="text/plain; charset=utf-8", headers={"Content-Length": str(len(content))})
-
-# favicon.ico (GET + HEAD)
-@app.get("/favicon.ico", tags=["system"])
-def favicon_get():
-    path = os.path.join(STATIC_DIR, "favicon.ico")
-    if os.path.isfile(path):
-        return FileResponse(path, media_type="image/x-icon")
-    # пустой ответ-иконка, чтобы не было 404
-    return Response(content=b"", media_type="image/x-icon")
-
-@app.head("/favicon.ico", tags=["system"])
-def favicon_head():
-    return Response(status_code=200, media_type="image/x-icon", headers={"Content-Length": "0"})
-
-@app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unhandled error: %s", exc)
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
-
-# ---- Tariffs ----
-@app.get("/tariffs", response_model=list[TariffSchema], tags=["tariffs"])
-def list_tariffs(db: Session = Depends(get_db)):
-    items = db.query(Tariff).all()
-    return [TariffSchema(code=t.code, name=t.name, min_amount=t.min_amount) for t in items]
-
-# ---- Balance ----
-@app.get("/users/{user_id}/balance", response_model=BalanceOut, tags=["balance"])
-def user_balance(user_id: int, db: Session = Depends(get_db)):
-    get_or_create_user(db, user_id)
-    return BalanceOut(user_id=user_id, balance=get_balance(db, user_id))
-
-# ---- Withdraw (user) ----
-class WithdrawIn(BaseModel):
-    amount: float = Field(gt=0)
-    dest: str = Field(min_length=3, max_length=128)
-
-@app.post("/users/{user_id}/withdraw", tags=["withdraw"])
-def request_withdraw(user_id: int, data: WithdrawIn, db: Session = Depends(get_db)):
-    wr = WithdrawRequest(user_id=user_id, amount=data.amount, dest=data.dest, status="pending")
-    db.add(wr)
-    db.commit()
-    db.refresh(wr)
-    logger.info("withdraw.create user=%s id=%s amount=%.2f", user_id, wr.id, data.amount)
-    return {"id": wr.id, "status": wr.status}
-
-# ---- Admin JSON API (защита заголовком) ----
-def check_admin(x_admin_token: str | None = Header(default=None)):
-    if x_admin_token != settings.ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-@app.get("/admin/withdraws", tags=["admin"])
-def admin_list_withdraws(
-    status: str = Query(default="pending"),
-    db: Session = Depends(get_db),
-    _: None = Depends(check_admin),
+@app.post("/users", response_model=UserResponse)
+async def create_user(
+    telegram_id: int,
+    username: str = None,
+    first_name: str = None,
+    last_name: str = None,
+    db: Session = Depends(get_db)
 ):
-    q = (
-        db.query(WithdrawRequest)
-        .filter(WithdrawRequest.status == status)
-        .order_by(WithdrawRequest.id.desc())
+    """Создать нового пользователя"""
+    repo = BalanceRepository(db)
+    user = repo.get_user_by_telegram_id(telegram_id)
+    if user:
+        raise HTTPException(status_code=400, detail="User already exists")
+    
+    user = repo.create_user(telegram_id, username, first_name, last_name)
+    return user
+
+
+# Баланс
+@app.post("/balance/deposit")
+async def deposit_balance(
+    telegram_id: int,
+    balance_update: BalanceUpdate,
+    db: Session = Depends(get_db)
+):
+    """Пополнить баланс пользователя"""
+    repo = BalanceRepository(db)
+    
+    # Получаем или создаем пользователя
+    user = repo.get_user_by_telegram_id(telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Создаем транзакцию
+    transaction = repo.create_transaction(
+        user_id=telegram_id,
+        amount=balance_update.amount,
+        transaction_type=TransactionType.DEPOSIT,
+        description=balance_update.description
     )
-    return [
-        {
-            "id": i.id,
-            "user_id": i.user_id,
-            "amount": float(i.amount),
-            "dest": i.dest,
-            "status": i.status,
-        }
-        for i in q.all()
-    ]
+    
+    # Обновляем баланс
+    success = repo.update_user_balance(telegram_id, balance_update.amount)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update balance")
+    
+    # Завершаем транзакцию
+    repo.complete_transaction(transaction.id)
+    
+    return {"message": "Balance updated successfully", "transaction_id": transaction.id}
 
-@app.post("/admin/withdraws/{wr_id}/approve", tags=["admin"])
-def admin_approve_withdraw(
-    wr_id: int,
-    db: Session = Depends(get_db),
-    _: None = Depends(check_admin),
+
+@app.get("/balance/{telegram_id}")
+async def get_balance(telegram_id: int, db: Session = Depends(get_db)):
+    """Получить баланс пользователя"""
+    repo = BalanceRepository(db)
+    user = repo.get_user_by_telegram_id(telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"balance": user.balance, "user_id": telegram_id}
+
+
+# Транзакции
+@app.get("/transactions/{telegram_id}", response_model=List[TransactionResponse])
+async def get_user_transactions(
+    telegram_id: int,
+    limit: int = 10,
+    db: Session = Depends(get_db)
 ):
-    wr = db.get(WithdrawRequest, wr_id)
-    if not wr:
-        raise HTTPException(404, "Not found")
-    if wr.status != "pending":
-        raise HTTPException(400, "Already processed")
+    """Получить транзакции пользователя"""
+    repo = BalanceRepository(db)
+    user = repo.get_user_by_telegram_id(telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    transactions = repo.get_user_transactions(telegram_id, limit)
+    return transactions
 
-    wr.status = "approved"
 
-    from core.models.transaction import Transaction
-    db.add(
-        Transaction(
-            user_id=wr.user_id,
-            kind="debit",
-            amount=float(wr.amount),
+# Заявки на вывод
+@app.post("/withdraw/request", response_model=WithdrawRequestResponse)
+async def create_withdraw_request(
+    telegram_id: int,
+    request: WithdrawRequestCreate,
+    db: Session = Depends(get_db)
+):
+    """Создать заявку на вывод средств"""
+    repo = BalanceRepository(db)
+    
+    # Проверяем пользователя
+    user = repo.get_user_by_telegram_id(telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Проверяем баланс
+    if user.balance < request.amount:
+        raise HTTPException(status_code=400, detail="Insufficient balance")
+    
+    # Проверяем минимальную сумму
+    if request.amount < settings.min_withdrawal_amount:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Minimum withdrawal amount is {settings.min_withdrawal_amount}"
         )
+    
+    # Проверяем, может ли пользователь вывести средства
+    if not repo.can_user_withdraw(telegram_id):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Withdrawal is not available yet. Please wait {settings.withdrawal_delay_days} days after your last deposit."
+        )
+    
+    # Создаем заявку
+    withdraw_request = repo.create_withdraw_request(
+        user_id=telegram_id,
+        amount=request.amount,
+        payment_method=request.payment_method,
+        payment_details=request.payment_details
     )
+    
+    return withdraw_request
 
-    db.commit()
-    logger.info("withdraw.approve id=%s user=%s", wr.id, wr.user_id)
-    return {"ok": True}
 
-@app.post("/admin/withdraws/{wr_id}/reject", tags=["admin"])
-def admin_reject_withdraw(
-    wr_id: int,
-    db: Session = Depends(get_db),
-    _: None = Depends(check_admin),
+@app.get("/withdraw/requests/{telegram_id}", response_model=List[WithdrawRequestResponse])
+async def get_user_withdraw_requests(
+    telegram_id: int,
+    db: Session = Depends(get_db)
 ):
-    wr = db.get(WithdrawRequest, wr_id)
-    if not wr:
-        raise HTTPException(404, "Not found")
-    if wr.status != "pending":
-        raise HTTPException(400, "Already processed")
+    """Получить заявки на вывод пользователя"""
+    repo = BalanceRepository(db)
+    user = repo.get_user_by_telegram_id(telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    requests = repo.get_user_withdraw_requests(telegram_id)
+    return requests
 
-    wr.status = "rejected"
-    db.commit()
-    logger.info("withdraw.reject id=%s user=%s", wr.id, wr.user_id)
-    return {"ok": True}
 
-# ===== Admin UI (HTML) =====
-# удобный редирект
-@app.get("/admin", tags=["admin-ui"])
-def admin_root_redirect():
-    return RedirectResponse(url="/admin/ui/withdraws")
+# Админские функции
+@app.get("/admin/withdraw/pending", response_model=List[WithdrawRequestResponse])
+async def get_pending_withdraw_requests(db: Session = Depends(get_db)):
+    """Получить все ожидающие заявки на вывод (только для админов)"""
+    repo = BalanceRepository(db)
+    requests = repo.get_pending_withdraw_requests()
+    return requests
 
-@app.get("/admin/ui/login", response_class=HTMLResponse, tags=["admin-ui"])
-def admin_login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
 
-@app.get("/admin/ui/withdraws", response_class=HTMLResponse, tags=["admin-ui"])
-def admin_withdraws_page(
-    request: Request,
-    status: str = "pending",
-    db: Session = Depends(get_db),
+@app.post("/admin/withdraw/{request_id}/process")
+async def process_withdraw_request(
+    request_id: int,
+    update: WithdrawRequestUpdate,
+    admin_telegram_id: int,
+    db: Session = Depends(get_db)
 ):
-    q = (
-        db.query(WithdrawRequest)
-        .filter(WithdrawRequest.status == status)
-        .order_by(WithdrawRequest.id.desc())
+    """Обработать заявку на вывод (только для админов)"""
+    repo = BalanceRepository(db)
+    
+    # Получаем заявку
+    withdraw_request = db.query(WithdrawRequest).filter(
+        WithdrawRequest.id == request_id
+    ).first()
+    
+    if not withdraw_request:
+        raise HTTPException(status_code=404, detail="Withdraw request not found")
+    
+    # Обновляем статус
+    success = repo.update_withdraw_request_status(
+        request_id=request_id,
+        status=update.status,
+        admin_notes=update.admin_notes,
+        processed_by=admin_telegram_id
     )
-    withdraws = [
-        {"id": i.id, "user_id": i.user_id, "amount": float(i.amount), "dest": i.dest, "status": i.status}
-        for i in q.all()
-    ]
-    # ты создал шаблон 'admin_withdraws.html' и ждёшь переменную 'withdraws' — отдаём именно так
-    return templates.TemplateResponse(
-        "admin_withdraws.html",
-        {"request": request, "status": status, "withdraws": withdraws},
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update withdraw request")
+    
+    # Если заявка одобрена, списываем средства с баланса
+    if update.status == WithdrawStatus.APPROVED:
+        # Создаем транзакцию на списание
+        transaction = repo.create_transaction(
+            user_id=withdraw_request.user_id,
+            amount=-withdraw_request.amount,  # Отрицательная сумма для списания
+            transaction_type=TransactionType.WITHDRAWAL,
+            description=f"Withdrawal approved. Admin fee: {withdraw_request.admin_fee}"
+        )
+        
+        # Обновляем баланс
+        repo.update_user_balance(withdraw_request.user_id, -withdraw_request.amount)
+        repo.complete_transaction(transaction.id)
+    
+    return {"message": "Withdraw request processed successfully"}
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "api.main:app",
+        host=settings.api_host,
+        port=settings.api_port,
+        reload=True
     )

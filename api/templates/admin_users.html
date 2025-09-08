@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Users - BalanceCore Admin{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1>Управление пользователями</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                {% if users %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Telegram ID</th>
+                                <th>Username</th>
+                                <th>Имя</th>
+                                <th>Баланс</th>
+                                <th>Статус</th>
+                                <th>Дата регистрации</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td>{{ user.id }}</td>
+                                <td>{{ user.telegram_id }}</td>
+                                <td>@{{ user.username or 'N/A' }}</td>
+                                <td>{{ user.first_name or '' }} {{ user.last_name or '' }}</td>
+                                <td>{{ "%.2f"|format(user.balance) }}</td>
+                                <td>
+                                    <span class="badge {% if user.is_active %}bg-success{% else %}bg-danger{% endif %}">
+                                        {% if user.is_active %}Активен{% else %}Заблокирован{% endif %}
+                                    </span>
+                                    {% if user.is_admin %}
+                                    <span class="badge bg-warning">Админ</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ user.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <p class="text-muted">Пользователи не найдены</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

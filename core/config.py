@@ -1,15 +1,34 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
+from typing import Optional
+
 
 class Settings(BaseSettings):
-    BOT_TOKEN: str
-    API_BASE_URL: str = "http://api:8000"
-    DATABASE_URL: str = "postgresql+psycopg2://app:app@db:5432/app"
-    REDIS_URL: str = "redis://redis:6379/0"
-    ADMIN_TOKEN: str
+    # Bot Configuration
+    bot_token: str
+    admin_user_id: int
+    
+    # Database Configuration
+    database_url: str
+    redis_url: str = "redis://localhost:6379/0"
+    
+    # API Configuration
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+    secret_key: str
+    
+    # Withdrawal Settings
+    min_withdrawal_amount: int = 100
+    admin_percentage: int = 5
+    withdrawal_delay_days: int = 7
+    
+    # YooKassa Settings
+    yookassa_shop_id: str = ""
+    yookassa_secret_key: str = ""
+    yookassa_test_mode: bool = True
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        case_sensitive=False,
-    )
 
-settings = Settings()  # pyright: ignore[reportCallIssue]
+settings = Settings()
