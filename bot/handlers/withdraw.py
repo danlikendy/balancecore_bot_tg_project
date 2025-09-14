@@ -22,36 +22,40 @@ class WithdrawStates(StatesGroup):
 
 
 @router.callback_query(F.data == "withdraw")
-async def callback_withdraw(callback: CallbackQuery, state: FSMContext, user: dict, balance_repo: dict):
+async def callback_withdraw(callback: CallbackQuery, state: FSMContext, user: dict, balance_repo: dict, db: dict):
     """Начать процесс вывода средств"""
+    from core.services.interest import InterestService
     
-    # Проверяем баланс
-    if user.balance <= 0:
+    interest_service = InterestService(db)
+    deposits = interest_service.get_user_deposits(user.telegram_id)
+    
+    # Рассчитываем доступные средства
+    available_balance = user.balance
+    available_deposits = 0.0
+    
+    for deposit in deposits:
+        if deposit.is_active:
+            # Применяем текущие проценты
+            current_interest = deposit.calculate_interest()
+            available_deposits += deposit.current_amount + current_interest
+    
+    total_available = available_balance + available_deposits
+    
+    # Проверяем общую доступную сумму
+    if total_available <= 0:
         await callback.message.edit_text(
-            "<b>Недостаточно средств</b>\n\nВаш баланс: 0 руб.\nСначала пополните баланс.",
+            "<b>Недостаточно средств</b>\n\nУ вас нет доступных средств для вывода.\nСначала пополните баланс.",
             reply_markup=get_main_menu_keyboard()
         )
         await callback.answer()
         return
     
     # Проверяем минимальную сумму
-    if user.balance < settings.min_withdrawal_amount:
+    if total_available < settings.min_withdrawal_amount:
         await callback.message.edit_text(
             f"<b>Недостаточно средств</b>\n\n"
-            f"Ваш баланс: {user.balance:.2f} руб.\n"
+            f"Доступно: {total_available:.2f} руб.\n"
             f"Минимальная сумма вывода: {settings.min_withdrawal_amount} руб.",
-            reply_markup=get_main_menu_keyboard()
-        )
-        await callback.answer()
-        return
-    
-    # Проверяем, может ли пользователь вывести средства
-    if not balance_repo.can_user_withdraw(user.telegram_id):
-        await callback.message.edit_text(
-            f"<b>Вывод временно недоступен</b>\n\n"
-            f"Вывод средств доступен через {settings.withdrawal_delay_days} дней "
-            f"после последнего пополнения.\n"
-            f"Попробуйте позже.",
             reply_markup=get_main_menu_keyboard()
         )
         await callback.answer()
@@ -62,7 +66,10 @@ async def callback_withdraw(callback: CallbackQuery, state: FSMContext, user: di
     withdraw_text = f"""
 <b>Вывод средств</b>
 
-Ваш баланс: <b>{user.balance:.2f} руб.</b>
+Доступно с баланса: <b>{available_balance:.2f} руб.</b>
+Доступно с депозитов: <b>{available_deposits:.2f} руб.</b>
+Общая сумма: <b>{total_available:.2f} руб.</b>
+
 Минимальная сумма: <b>{settings.min_withdrawal_amount} руб.</b>
 Комиссия администратора: <b>{settings.admin_percentage}%</b>
 
@@ -206,14 +213,43 @@ async def process_payment_details(message: Message, state: FSMContext):
 
 
 @router.callback_query(F.data == "confirm", WithdrawStates.confirming_withdraw)
-async def confirm_withdraw(callback: CallbackQuery, state: FSMContext, balance_repo: dict, user: dict):
+async def confirm_withdraw(callback: CallbackQuery, state: FSMContext, balance_repo: dict, user: dict, db: dict):
     """Подтверждение вывода"""
+    from core.services.interest import InterestService
+    
     data = await state.get_data()
     amount = data['amount']
     payment_method = data['payment_method']
     payment_details = data['payment_details']
     
     try:
+        interest_service = InterestService(db)
+        deposits = interest_service.get_user_deposits(user.telegram_id)
+        
+        # Рассчитываем, сколько нужно взять с депозитов и с баланса
+        remaining_amount = amount
+        deposits_to_close = []
+        
+        # Сначала берем с депозитов
+        for deposit in deposits:
+            if deposit.is_active and remaining_amount > 0:
+                # Применяем текущие проценты
+                current_interest = deposit.calculate_interest()
+                deposit.apply_interest()
+                
+                if deposit.current_amount <= remaining_amount:
+                    # Закрываем весь депозит
+                    deposits_to_close.append(deposit)
+                    remaining_amount -= deposit.current_amount
+                else:
+                    # Частично закрываем депозит (пока не реализовано)
+                    remaining_amount = 0
+                    break
+        
+        # Закрываем депозиты
+        for deposit in deposits_to_close:
+            interest_service.close_deposit(deposit.id)
+        
         # Создаем заявку на вывод
         withdraw_request = balance_repo.create_withdraw_request(
             user_id=user.telegram_id,

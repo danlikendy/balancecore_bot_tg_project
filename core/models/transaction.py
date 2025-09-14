@@ -8,6 +8,7 @@ import enum
 class TransactionType(str, enum.Enum):
     DEPOSIT = "deposit"
     WITHDRAWAL = "withdrawal"
+    INTEREST = "interest"
     ADMIN_BONUS = "admin_bonus"
     ADMIN_PENALTY = "admin_penalty"
 

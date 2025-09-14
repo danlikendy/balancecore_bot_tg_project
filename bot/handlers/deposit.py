@@ -6,6 +6,7 @@ from aiogram.fsm.state import StatesGroup, State
 from bot.keyboards.menu import get_main_menu_keyboard, get_cancel_keyboard, get_confirm_keyboard, get_payment_methods_keyboard
 from core.models.transaction import TransactionType
 from core.services.payment import yookassa_service
+from core.services.interest import InterestService
 from core.models.payment import Payment, PaymentStatus, PaymentMethod
 import re
 
@@ -147,48 +148,59 @@ async def process_payment_method(callback: CallbackQuery, state: FSMContext, use
 
 
 @router.callback_query(F.data == "confirm", DepositStates.confirming_deposit)
-async def confirm_deposit(callback: CallbackQuery, state: FSMContext, balance_repo: dict, user: dict):
+async def confirm_deposit(callback: CallbackQuery, state: FSMContext, balance_repo: dict, user: dict, db: dict):
     """Подтверждение пополнения"""
     data = await state.get_data()
     amount = data['amount']
     description = data.get('description')
     
     try:
+        # Создаем сервис для работы с процентами
+        interest_service = InterestService(db)
+        
+        # Создаем депозит с процентами (1% в день)
+        deposit = interest_service.create_deposit(
+            user_id=user.telegram_id,
+            amount=amount,
+            daily_percentage=1.0  # 1% в день
+        )
+        
         # Создаем транзакцию
         transaction = balance_repo.create_transaction(
             user_id=user.telegram_id,
             amount=amount,
             transaction_type="deposit",
-            description=description
+            description=description or f"Создание депозита #{deposit.id}"
         )
         
-        # Обновляем баланс
-        success = balance_repo.update_user_balance(user.telegram_id, amount)
+        # Завершаем транзакцию
+        balance_repo.complete_transaction(transaction.id)
         
-        if success:
-            # Завершаем транзакцию
-            balance_repo.complete_transaction(transaction.id)
-            
-            success_text = f"""
-<b>Пополнение успешно!</b>
+        success_text = f"""
+<b>Депозит создан успешно!</b>
 
-Сумма: <b>{amount:.2f} руб.</b>
+Сумма депозита: <b>{amount:.2f} руб.</b>
+Процент в день: <b>1.0%</b>
 Описание: {description or 'Не указано'}
+ID депозита: <b>{deposit.id}</b>
 ID транзакции: {transaction.id}
 
-Ваш новый баланс: <b>{user.balance + amount:.2f} руб.</b>
-            """
-            
-            await callback.message.edit_text(
-                success_text,
-                reply_markup=get_main_menu_keyboard()
-            )
-        else:
-            raise Exception("Failed to update balance")
+<b>Как работают проценты:</b>
+• Проценты начисляются ежедневно
+• Вы можете вывести средства в любое время
+• При выводе проценты автоматически добавляются к сумме
+
+Ваш баланс: <b>{user.balance:.2f} руб.</b>
+        """
+        
+        await callback.message.edit_text(
+            success_text,
+            reply_markup=get_main_menu_keyboard()
+        )
             
     except Exception as e:
         error_text = f"""
-<b>Ошибка при пополнении</b>
+<b>Ошибка при создании депозита</b>
 
 Произошла ошибка: {str(e)}
 

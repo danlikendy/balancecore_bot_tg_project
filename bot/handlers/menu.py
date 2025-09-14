@@ -78,14 +78,39 @@ async def callback_main_menu(callback: CallbackQuery, user: dict, is_admin: bool
 
 
 @router.callback_query(F.data == "balance")
-async def callback_balance(callback: CallbackQuery, user: dict):
+async def callback_balance(callback: CallbackQuery, user: dict, db: dict):
     """Показать баланс"""
+    from core.services.interest import InterestService
+    
+    interest_service = InterestService(db)
+    deposits = interest_service.get_user_deposits(user.telegram_id)
+    
+    # Рассчитываем общую сумму депозитов с процентами
+    total_deposits = 0.0
+    total_interest = 0.0
+    active_deposits_count = 0
+    
+    for deposit in deposits:
+        if deposit.is_active:
+            # Применяем текущие проценты для расчета
+            current_interest = deposit.calculate_interest()
+            total_deposits += deposit.current_amount + current_interest
+            total_interest += deposit.current_amount - deposit.amount + current_interest
+            active_deposits_count += 1
+    
     balance_text = f"""
 <b>Ваш баланс</b>
 
 Текущий баланс: <b>{user.balance:.2f} руб.</b>
 
-Доступно для вывода: <b>{user.balance:.2f} руб.</b>
+<b>Депозиты:</b>
+Активных депозитов: <b>{active_deposits_count}</b>
+Общая сумма с процентами: <b>{total_deposits:.2f} руб.</b>
+Заработано процентов: <b>{total_interest:.2f} руб.</b>
+
+<b>Доступно для вывода:</b>
+С баланса: <b>{user.balance:.2f} руб.</b>
+С депозитов: <b>{total_deposits:.2f} руб.</b>
     """
     
     await callback.message.edit_text(

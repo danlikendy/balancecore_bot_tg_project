@@ -42,7 +42,7 @@ class Payment(Base, BaseModel):
     paid_at = Column(DateTime, nullable=True)
     
     # Связь с пользователем
-    user = relationship("User", backref="payments")
+    user = relationship("User", back_populates="payments")
     
     def __repr__(self):
         return f"<Payment(id={self.id}, user_id={self.user_id}, amount={self.amount}, status={self.status})>"
