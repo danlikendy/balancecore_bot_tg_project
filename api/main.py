@@ -16,6 +16,8 @@ from core.models.transaction import TransactionType, TransactionStatus
 from core.models.withdraw_request import WithdrawRequest, WithdrawStatus
 from core.config import settings
 from api.admin_ui import router as admin_router
+from api.paymaster_webhooks import router as paymaster_router
+from api.ozon_webhooks import router as ozon_router
 
 app = FastAPI(
     title="BalanceCore Bot API",
@@ -23,8 +25,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Подключаем роутер админ-панели
+# Подключаем роутеры
 app.include_router(admin_router)
+app.include_router(paymaster_router)
+app.include_router(ozon_router)
 
 # Подключаем статические файлы и шаблоны
 app.mount("/static", StaticFiles(directory="api/static"), name="static")

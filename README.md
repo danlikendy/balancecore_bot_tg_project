@@ -28,6 +28,18 @@ YOOKASSA_SHOP_ID=ваш_shop_id
 YOOKASSA_SECRET_KEY=ваш_secret_key
 YOOKASSA_TEST_MODE=true
 
+# PayMaster настройки (альтернативная платежная система)
+PAYMASTER_MERCHANT_ID=ваш_merchant_id
+PAYMASTER_SECRET_KEY=ваш_secret_key
+PAYMASTER_API_URL=https://paymaster.ru
+PAYMASTER_TEST_MODE=true
+
+# Ozon Pay настройки (платежная система Ozon)
+OZON_CLIENT_ID=ваш_client_id
+OZON_CLIENT_SECRET=ваш_client_secret
+OZON_API_URL=https://api.ozon.ru
+OZON_TEST_MODE=true
+
 # Настройки системы
 MIN_WITHDRAWAL_AMOUNT=100
 ADMIN_PERCENTAGE=5

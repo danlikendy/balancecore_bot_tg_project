@@ -38,12 +38,9 @@ def get_confirm_keyboard() -> InlineKeyboardMarkup:
 def get_payment_methods_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора способа оплаты"""
     keyboard = [
-        [InlineKeyboardButton(text="Банковская карта", callback_data="payment_card")],
-        [InlineKeyboardButton(text="ЮMoney", callback_data="payment_yoomoney")],
-        [InlineKeyboardButton(text="QIWI Кошелек", callback_data="payment_qiwi")],
-        [InlineKeyboardButton(text="WebMoney", callback_data="payment_webmoney")],
-        [InlineKeyboardButton(text="Альфа-Клик", callback_data="payment_alfabank")],
-        [InlineKeyboardButton(text="Сбербанк Онлайн", callback_data="payment_sberbank")],
+        [InlineKeyboardButton(text="YooKassa", callback_data="payment_method_yookassa")],
+        [InlineKeyboardButton(text="PayMaster", callback_data="payment_method_paymaster")],
+        [InlineKeyboardButton(text="Ozon Pay", callback_data="payment_method_ozon")],
         [InlineKeyboardButton(text="Отмена", callback_data="cancel")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)

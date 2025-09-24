@@ -26,6 +26,19 @@ class Settings(BaseSettings):
     yookassa_secret_key: str = ""
     yookassa_test_mode: bool = True
     
+    # PayMaster Settings
+    paymaster_merchant_id: str = ""
+    paymaster_secret_key: str = ""
+    paymaster_api_url: str = "https://paymaster.ru"
+    paymaster_test_mode: bool = True
+    
+    # Ozon Pay Settings
+    ozon_client_id: str = ""
+    ozon_client_secret: str = ""
+    ozon_api_url: str = "https://api.ozon.ru"
+    ozon_test_mode: bool = True
+    
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

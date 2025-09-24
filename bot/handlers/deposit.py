@@ -6,8 +6,11 @@ from aiogram.fsm.state import StatesGroup, State
 from bot.keyboards.menu import get_main_menu_keyboard, get_cancel_keyboard, get_confirm_keyboard, get_payment_methods_keyboard
 from core.models.transaction import TransactionType
 from core.services.payment import yookassa_service
+from core.services.paymaster import PayMasterService
+from core.services.ozon import OzonPayService
 from core.services.interest import InterestService
 from core.models.payment import Payment, PaymentStatus, PaymentMethod
+from datetime import datetime
 import re
 
 router = Router()
@@ -106,16 +109,13 @@ async def process_deposit_description(message: Message, state: FSMContext):
     )
 
 
-@router.callback_query(F.data.startswith("payment_"), DepositStates.waiting_for_payment_method)
+@router.callback_query(F.data.startswith("payment_method_"), DepositStates.waiting_for_payment_method)
 async def process_payment_method(callback: CallbackQuery, state: FSMContext, user: dict, db: dict):
     """Обработка выбора способа оплаты"""
     payment_method_map = {
-        "payment_card": PaymentMethod.BANK_CARD,
-        "payment_yoomoney": PaymentMethod.YOO_MONEY,
-        "payment_qiwi": PaymentMethod.QIWI,
-        "payment_webmoney": PaymentMethod.WEBMONEY,
-        "payment_alfabank": PaymentMethod.ALFABANK,
-        "payment_sberbank": PaymentMethod.SBERBANK
+        "payment_method_yookassa": "yookassa",
+        "payment_method_paymaster": "paymaster", 
+        "payment_method_ozon": "ozon",
     }
     
     payment_method = payment_method_map.get(callback.data)
@@ -130,12 +130,20 @@ async def process_payment_method(callback: CallbackQuery, state: FSMContext, use
     amount = data['amount']
     description = data.get('description')
     
+    # Получаем название сервиса
+    service_names = {
+        "yookassa": "YooKassa",
+        "paymaster": "PayMaster",
+        "ozon": "Ozon Pay"
+    }
+    service_name = service_names.get(payment_method, payment_method)
+    
     confirm_text = f"""
 <b>Подтверждение пополнения</b>
 
 Сумма: <b>{amount:.2f} руб.</b>
 Описание: {description or 'Не указано'}
-Способ оплаты: <b>{payment_method.value}</b>
+Способ оплаты: <b>{service_name}</b>
 
 Подтвердите создание платежа:
     """
@@ -153,54 +161,84 @@ async def confirm_deposit(callback: CallbackQuery, state: FSMContext, balance_re
     data = await state.get_data()
     amount = data['amount']
     description = data.get('description')
+    payment_method = data.get('payment_method')
     
     try:
-        # Создаем сервис для работы с процентами
-        interest_service = InterestService(db)
+        # Выбираем сервис в зависимости от способа оплаты
+        from core.config import settings
         
-        # Создаем депозит с процентами (1% в день)
-        deposit = interest_service.create_deposit(
+        if payment_method == "paymaster":
+            payment_service = PayMasterService(settings)
+            service_name = "PayMaster"
+        elif payment_method == "ozon":
+            payment_service = OzonPayService(settings)
+            service_name = "Ozon Pay"
+        else:
+            payment_service = yookassa_service
+            service_name = "YooKassa"
+        
+        # Создаем платеж
+        payment_result = payment_service.create_payment(
+            amount=amount,
+            description=description or f"Пополнение депозита пользователя {user.telegram_id}",
+            user_id=user.telegram_id
+        )
+        
+        if not payment_result["success"]:
+            raise Exception(payment_result["error"])
+        
+        # Создаем запись о платеже в БД
+        payment = Payment(
             user_id=user.telegram_id,
             amount=amount,
-            daily_percentage=1.0  # 1% в день
+            description=description,
+            payment_method=payment_method,
+            status=PaymentStatus.PENDING,
+            yookassa_payment_id=payment_result["payment_id"],
+            yookassa_confirmation_url=payment_result.get("payment_url")
         )
+        db.add(payment)
+        db.commit()
+        db.refresh(payment)
         
         # Создаем транзакцию
         transaction = balance_repo.create_transaction(
             user_id=user.telegram_id,
             amount=amount,
             transaction_type="deposit",
-            description=description or f"Создание депозита #{deposit.id}"
+            description=description or f"Пополнение через PayMaster (ID: {payment.id})"
         )
         
-        # Завершаем транзакцию
-        balance_repo.complete_transaction(transaction.id)
-        
-        success_text = f"""
-<b>Депозит создан успешно!</b>
+        # Показываем ссылку для оплаты
+        payment_text = f"""
+<b>Платеж создан!</b>
 
-Сумма депозита: <b>{amount:.2f} руб.</b>
-Процент в день: <b>1.0%</b>
+Сумма: <b>{amount:.2f} руб.</b>
 Описание: {description or 'Не указано'}
-ID депозита: <b>{deposit.id}</b>
-ID транзакции: {transaction.id}
+Способ оплаты: <b>{service_name}</b>
 
-<b>Как работают проценты:</b>
-• Проценты начисляются ежедневно
-• Вы можете вывести средства в любое время
-• При выводе проценты автоматически добавляются к сумме
+<b>Для оплаты:</b>
+1. Перейдите по ссылке ниже
+2. Выберите удобный способ оплаты
+3. Подтвердите платеж
+4. Деньги поступят на депозит автоматически
 
-Ваш баланс: <b>{user.balance:.2f} руб.</b>
+<a href="{payment_result['payment_url']}">💳 Оплатить через {service_name}</a>
+
+ID платежа: <b>{payment_result['payment_id']}</b>
         """
         
+        if payment_result.get("qr_code"):
+            payment_text += f"\n\n📱 Или отсканируйте QR-код:\n{payment_result['qr_code']}"
+        
         await callback.message.edit_text(
-            success_text,
+            payment_text,
             reply_markup=get_main_menu_keyboard()
         )
             
     except Exception as e:
         error_text = f"""
-<b>Ошибка при создании депозита</b>
+<b>Ошибка при создании платежа</b>
 
 Произошла ошибка: {str(e)}
 

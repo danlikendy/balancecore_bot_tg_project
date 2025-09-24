@@ -18,7 +18,6 @@ class User(Base, BaseModel):
     
     # Связи
     deposits = relationship("Deposit", back_populates="user")
-    payments = relationship("Payment", back_populates="user")
     
     def get_total_deposits(self) -> float:
         """Получить общую сумму активных депозитов"""
