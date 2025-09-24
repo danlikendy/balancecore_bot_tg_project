@@ -1,6 +1,6 @@
 # BalanceCore Bot
 
-Telegram бот для управления депозитами с ежедневным начислением процентов. Пользователи могут создавать депозиты, получать проценты ежедневно и выводить средства в любое время.
+Telegram бот для управления депозитами с ежедневным начислением процентов. Пользователи могут создавать депозиты, получать проценты ежедневно и выводить средства в любое время
 
 ## Быстрый старт
 
@@ -23,7 +23,7 @@ ADMIN_USER_ID=ваш_telegram_id
 DATABASE_URL=postgresql://balancecore:balancecore_password@localhost:5432/balancecore_bot
 SECRET_KEY=ваш-секретный-ключ
 
-# YooKassa настройки (для приема платежей)
+# YooKassa настройки
 YOOKASSA_SHOP_ID=ваш_shop_id
 YOOKASSA_SECRET_KEY=ваш_secret_key
 YOOKASSA_TEST_MODE=true
@@ -64,7 +64,7 @@ make dev
 make docker-up postgres redis  # Только БД
 make migrate                   # Миграции
 uvicorn api.main:app --reload  # API
-python bot/main.py            # Бот
+python bot/main.py             # Бот
 ```
 
 ## Функциональность
@@ -105,7 +105,7 @@ python bot/main.py            # Бот
 
 ### Настройка ЮKassa:
 
-1. **Регистрация**: Зарегистрируйтесь на https://yookassa.ru/
+1. **Регистрация**: Зарегистрируйтесь на https://yookassa.ru
 2. **Получение данных**: Получите Shop ID и Secret Key
 3. **Настройка в .env**:
    ```bash
@@ -195,32 +195,32 @@ WITHDRAWAL_DELAY_DAYS=0        # Задержка вывода (0 = без за�
 ```
 balancecore_bot_tg_project/
 ├── bot/                    # Telegram бот
-│   ├── handlers/          # Обработчики команд
-│   ├── keyboards/         # Клавиатуры
-│   ├── middlewares/       # Middleware
-│   └── main.py           # Точка входа бота
-├── api/                   # FastAPI приложение
-│   ├── main.py           # Основное API
-│   ├── admin_ui.py       # Админ-панель
-│   ├── templates/        # HTML шаблоны
-│   └── static/           # CSS/JS файлы
-├── core/                  # Основная логика
-│   ├── models/           # Модели базы данных
-│   │   ├── user.py       # Модель пользователя
-│   │   ├── deposit.py    # Модель депозита с процентами
-│   │   ├── transaction.py # Модель транзакций
-│   │   └── payment.py    # Модель платежей ЮKassa
-│   ├── services/         # Бизнес-логика
-│   │   ├── interest.py   # Сервис начисления процентов
-│   │   └── payment.py    # Сервис работы с ЮKassa
-│   ├── repositories/     # Репозитории для работы с БД
-│   ├── config.py         # Конфигурация
-│   └── db.py            # Подключение к БД
-├── migrations/            # Alembic миграции
-├── scripts/              # Скрипты развертывания
-│   └── daily_interest.py # Ежедневное начисление процентов
-├── tests/                # Тесты
-└── docker-compose.yml    # Docker конфигурация
+│   ├── handlers/           # Обработчики команд
+│   ├── keyboards/          # Клавиатуры
+│   ├── middlewares/        # Middleware
+│   └── main.py             # Точка входа бота
+├── api/                    # FastAPI приложение
+│   ├── main.py             # Основное API
+│   ├── admin_ui.py         # Админ-панель
+│   ├── templates/          # HTML шаблоны
+│   └── static/             # CSS/JS файлы
+├── core/                   # Основная логика
+│   ├── models/             # Модели базы данных
+│   │   ├── user.py         # Модель пользователя
+│   │   ├── deposit.py      # Модель депозита с процентами
+│   │   ├── transaction.py  # Модель транзакций
+│   │   └── payment.py      # Модель платежей ЮKassa
+│   ├── services/           # Бизнес-логика
+│   │   ├── interest.py     # Сервис начисления процентов
+│   │   └── payment.py      # Сервис работы с ЮKassa
+│   ├── repositories/       # Репозитории для работы с БД
+│   ├── config.py           # Конфигурация
+│   └── db.py               # Подключение к БД
+├── migrations/             # Alembic миграции
+├── scripts/                # Скрипты развертывания
+│   └── daily_interest.py   # Ежедневное начисление процентов
+├── tests/                  # Тесты
+└── docker-compose.yml      # Docker конфигурация
 ```
 
 ## Разработка
